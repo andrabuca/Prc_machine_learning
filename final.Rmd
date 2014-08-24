@@ -1,0 +1,95 @@
+---
+title: Predicting fitness exercises
+
+---
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). The data for this project come from the following source: http://groupware.les.inf.puc-rio.br/har.
+
+
+```{r echo = FALSE, results = "hide"}
+library(knitr)
+library(caret)
+setwd("G:/Data science spec/practical_machine")
+pml_testing <- read.csv("pml-testing.csv")
+pml_training <- read.csv("pml-training.csv")
+```
+
+The data is provided as the raw training set and testing set. Looking at the initial training set we can see that there are a large number of observations (19622 rows) and variables (160 columns).
+```{r echo = FALSE}
+dim(pml_training) # 160 cols * 19622 rows
+```
+
+The testing set will be used for later predictions and contains only 20 observations and the same 160 variables as the training set. 
+```{r echo = FALSE}
+dim(pml_testing) # 160 cols * 20 rows
+```
+
+A first look at the training set shows us that the first 7 columns contain non-measures. To give the prediction more accuracy, the first 7 columns will be eliminated from our further analysis. Further, all the columns which contrain at least one NA or missing value, will be eliminated from our sample. Analogue, we will perform the same data cleaning to the training data set. 
+
+```{r results = "hide"}
+# Data preparation
+## 1. eliminate first 7 columns as they contain non-measures
+pml_train <- data.frame(pml_training[ ,8:160])
+pml_test <- data.frame(pml_testing[ ,8:160])
+
+## 2. drop all columns with at least one NA or missing value, to improve prediction accuracy
+pml_train <- pml_train[ , colSums(is.na(pml_train)) == 0]
+pml_train <- pml_train[ ,colSums(pml_train == "") == 0]
+
+pml_test <- pml_test[ , colSums(is.na(pml_test)) == 0]
+pml_test <- pml_test[ ,colSums(pml_test == "") == 0]
+```
+
+For the training set the number of columns dropped from 160 to 53 and now we have a full clean data set what we can use for further analysis. 
+```{r echo = FALSE}
+dim(pml_train) # 19622 rows    53 cols
+```
+Analogue, the testing set also dropped from 160 to 53 variables, having the same columns as the training set. Training and test must be processed in the same way. 
+```{r echo = FALSE}
+dim(pml_test) # 20 rows 53 cols
+```
+
+Now we will take our cleaned traing set and perform data splitting into new training/testing sets. Using the createDataPartition function from Caret a series of test/training partitions will be created for model fit purposes. The new training set will have 75% of the cleaned training set, while the new test set will have 25% of it.  
+```{r}
+inTrain    <- createDataPartition(pml_train$classe, p = 0.75, list = FALSE)
+training <- pml_train[inTrain, ]
+testing  <- pml_train[-inTrain, ]
+```
+
+For further predictions we will use the random forest technique. The randomForest function will grow multiple trees and wode and at each slit will bootstrap the variables. The method gives great accuracy, performs cross validation and avoids overfitting. Having all these characteristics, it will be the method of choice for this analysis. The class variable, that shows the manner in which the 5 persons did the exercise, will be fitted against all the other 52 variables left in the sample. 
+
+```{r echo = FALSE}
+library(randomForest)
+
+modFit <- randomForest(formula = classe~.,data=training)
+modFit
+```
+
+The confusion matrix shows a correct prediction of each classe (A to E) with an average error rate of 0.44%, which makes this model fit highly accurate. There were 500 trees generated with a number of 7 variables tried at each split. 
+
+However, the best way to see if the model is accurate or not, is to try and predict it model using the testing set that we split from the original data set. 
+```{r}
+pred <- predict(modFit, testing)
+testing$predRight <- pred==testing$classe
+table(pred,testing$classe)
+```
+The confusion matrix shows a correct prediction for all the A to E classe, which shows that the model has an accurate prediction power. 
+
+```{r echo = FALSE, results = "hide"}
+predTest <- predict(modFit,newdata=pml_test) 
+```
+However, the final prediction is to test our model against the initial testing set with 20 observations. From the assignment instructions, the following function writes individual files containing the predictions that will be submitted to Coursera:
+```{r}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(predTest)
+
+```
+
+The 20 test predictions for the original testing set were all corectly predicted. 
